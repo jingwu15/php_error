@@ -1,6 +1,6 @@
 {
     "name": "jingwu/error",
-    "description": "日志落地到ES",
+    "description": "自定义错误处理",
     "keywords": ["log", "error", "exception"],
     "homepage": "https://github.com/jingwu15/php_error_handle.git",
     "license": "MIT",
