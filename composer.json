@@ -1,0 +1,24 @@
+{
+    "name": "jingwu/error",
+    "description": "日志落地到ES",
+    "keywords": ["log", "error", "exception"],
+    "homepage": "https://github.com/jingwu15/php_error_handle.git",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "jingwu",
+            "email": "jingwu@vip.163.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Jingwu\\Error\\": "src/error/"
+        }
+    },
+    "require": {
+        "php": ">=5.4.0"
+    },
+    "require-dev": {
+    }
+}
+
