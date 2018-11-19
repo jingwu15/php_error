@@ -15,8 +15,9 @@ namespace Jingwu\Error;
 
 if(!defined('ERROR_DISPLAY_CLI'))  define('ERROR_DISPLAY_CLI',  true);
 if(!defined('ERROR_DISPLAY_HTML')) define('ERROR_DISPLAY_HTML', false);
-if(!defined('SYS_KEY'))            define('SYS_KEY',            'default');
-if(in_array(ini_get('display_errors'), ["On", "Off"])) ini_set("display_errors", "On");
+if(!defined('ERROR_TRACELOG_JSON')) define('ERROR_TRACELOG_JSON', true);
+if(!defined('SYS_KEY')) define('SYS_KEY', 'default');
+if(in_array(ini_get('display_errors'), ["On", "Off"])) ini_set("display_errors","On");
 define('ERROR_LOGFILE', '/tmp/log_phperror_'.SYS_KEY.'.log');
 
 class ErrorHandle {
@@ -77,8 +78,9 @@ p.notice{width:100%;height:25px;line-height:25px;text-align:center;}
 </div></body></html>
 EOF;
 
-	public function Error($errno, $msg, $file, $line) {
+    public function Error($errno, $msg, $file, $line) {
         $trace    = debug_backtrace();
+        unset($trace[0]);
         $errorRaw = [
             "create_at" => date('Y-m-d H:i:s'),
             "type"      => self::$errnoMap[$errno],
@@ -87,20 +89,25 @@ EOF;
             "msg"       => $msg,
             "trace"     => self::formatTrace(self::filterTrace($trace)),
         ];
-        file_put_contents(ERROR_LOGFILE, date("Y-m-d H:i:s")."\t".self::formatCli($errorRaw)."\n\n\n\n", FILE_APPEND);
+        if(ERROR_TRACELOG_JSON) {
+            file_put_contents(ERROR_LOGFILE, date("Y-m-d H:i:s")."\t".json_encode($errorRaw)."\n", FILE_APPEND);
+        } else {
+            file_put_contents(ERROR_LOGFILE, date("Y-m-d H:i:s")."\t".self::formatCli($errorRaw)."\n\n", FILE_APPEND);
+        }
 
-        if(substr(php_sapi_name(), 0, 3) != 'cli') ob_clean();
         if(!($errno & ini_get('error_reporting')) || ini_get('display_errors') == 'Off') return;
+        //if($errno != E_ERROR || ini_get('display_errors') == 'Off') return;
+        if(substr(php_sapi_name(), 0, 3) != 'cli') ob_clean();
         if(ERROR_DISPLAY_CLI)  echo self::formatCli($errorRaw)."\r\n";
         if(ERROR_DISPLAY_HTML) echo self::formatHtml($errorRaw)."\r\n";
         exit;
     }
 
-	public  function Exception($exception) {
+    public  function Exception($exception) {
         $trace = array_reverse($exception->getTrace());
-        $file = $trace[0]['file'] ? $trace[0]['file'] : $exception->getFile();
-        $line = $trace[0]['line'] ? $trace[0]['line'] : $exception->getLine();
-
+        krsort($trace);
+        $file = $exception->getFile();
+        $line = $exception->getLine();
         $errorRaw = [
             "create_at" => date('Y-m-d H:i:s'),
             "type"      => get_class($exception),
@@ -109,7 +116,11 @@ EOF;
             "msg"       => $exception->getMessage(),
             "trace"     => self::formatTrace(self::filterTrace($trace)),
         ];
-        file_put_contents(ERROR_LOGFILE, date("Y-m-d H:i:s")."\t".self::formatCli($errorRaw)."\n\n\n\n", FILE_APPEND);
+        if(ERROR_TRACELOG_JSON) {
+            file_put_contents(ERROR_LOGFILE, date("Y-m-d H:i:s")."\t".json_encode($errorRaw)."\n", FILE_APPEND);
+        } else {
+            file_put_contents(ERROR_LOGFILE, date("Y-m-d H:i:s")."\t".self::formatCli($errorRaw)."\n\n", FILE_APPEND);
+        }
 
         if(E_ERROR & ini_get('error_reporting')) {
             if(ERROR_DISPLAY_CLI)  echo self::formatCli($errorRaw)."\r\n";
@@ -118,22 +129,21 @@ EOF;
             echo self::$_tplDefault;
         }
         exit;
-	}
-	
-	//register_shutdown_function(array(new \Ypf\Lib\ErrHandler(), "Shutdown"))
-	public function Shutdown() {
-		if($error = error_get_last()) {
+    }
+
+    public function Shutdown() {
+        if($error = error_get_last()) {
             if(($error['type'] & ini_get('error_reporting')) !== $error['type']) return;
-			$this->Error($error['type'], $error['message'], $error['file'], $error['line']);
-		}
-	}
+            $this->Error($error['type'], $error['message'], $error['file'], $error['line']);
+        }
+    }
 
     public static function errorCode($filePath, $lineno, $lineLimit = 5) {
         if(!is_file($filePath)) return [];
         $start = $lineno - 1 - $lineLimit;
         $rows = array_slice(file($filePath), $start, $lineLimit * 2);
         array_walk($rows, function(&$line, $key, $start) {$line = ($start + $key + 1).":\t".rtrim($line);}, $start);
-        $rows[$lineLimit-1] = rtrim($rows[$lineLimit-1]) . " //!!!please fix bug in here!!!";
+        $rows[$lineLimit] = rtrim($rows[$lineLimit]) . " //!!!please fix bug in here!!!";
         return $rows;
     }
 
@@ -173,9 +183,8 @@ EOF;
 
     static public function formatCli($info) {
         $lines = [];
-        $lines[] = "at {$info['file']} {$info['line']}";
-        $lines[] = "{$info['type']}: {$info['msg']}";
-        $lines[] = implode("\r\n", self::errorCode($info['file'], $info['line'] + 1))."...";
+        $lines[] = "{$info['type']}: {$info['msg']} in {$info['file']} {$info['line']}";
+        $lines[] = implode("\r\n", self::errorCode($info['file'], $info['line']))."...";
         $lines[] = "Trace:";
         $lines[] = implode("\r\n", $info['trace']);
         return implode("\r\n", $lines);
